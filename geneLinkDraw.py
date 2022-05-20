@@ -185,12 +185,64 @@ class GeneCoordinates:
 
 
 
+# helper class containing array of handpicked color names for automatic coloring
+class Palette:
+    """
+    Helper class containing an array of handpicked color names for automatic coloring
+
+    ...
+    Attributes
+    ----------
+    colors : list
+        list of color names
+    i : int
+        current index
+
+    Methods
+    -------
+    color():
+        returns the current color
+    inc():
+        sets index to next color
+    """
+    def __init__(self, idx: int = 0):
+        """
+        Constructor
+
+        Parameters
+        ----------
+        idx : int
+            initial color index, defaults to 0, set to -1 if given value is too big
+        """
+        self.colors = ['darkblue', 'darkorange', 'blueviolet', 'burlywood', 'darkgreen', 'darkmagenta', 'cadetblue',
+                       'chocolate', 'cyan', 'darkgoldenrod', 'darkcyan', 'darkkhaki', 'darkred', 'darkolivegreen', 
+                       'darksalmon', 'darkseagreen', 'darkslateblue', 'darkslategrey', 'darkturquoise', 'deeppink',
+                       'dodgerblue', 'gold', 'greenyellow', 'indigo', 'khaki', 'lightblue', 'maroon', 'plum', 'teal', 
+                       'bisque', 'aquamarine']
+        self.i = idx if idx < len(self.colors) else -1 # default to last color if idx too large
+
+    def color(self):
+        """
+        Returns the current color name
+        """
+        return self.colors[self.i]
+
+    def inc(self):
+        """
+        Sets the index to next color, starting over if color list has endet
+        """
+        self.i += 1
+        if self.i >= len(self.colors):
+            self.i = 0
+
+
+
 # drawing functions
 
 def draw(genes: list[Gene], links: list[Link], font = None,
          width: int = 1920, height: int = 1080, dpi: int = 100,
          outerMargin: int = None, genewidth: int = 5, linkwidth: int = 2, fontsize: int = 12,
-         genecols: list = None, elementcols: dict = None, show: bool = True):
+         genecols: list = None, elementcols: dict = None, linkcol = None, show: bool = True):
     """
     Draws an image with genes as horizontal bars, possibly with gene elements like exons inside, 
       and links connecting them
@@ -210,6 +262,9 @@ def draw(genes: list[Gene], links: list[Link], font = None,
         fontsize: fontsize of text
         genecols: optional list of colors for each single gene, same length as genes
         elementcols: optional dict with element type names as keys and color values as values
+        linkcol: optional color value (name or RGB tuple) or 2-tuple of color values to use for all links. If single
+                 value, all links are colored this way, otherwise links between opposing strands are colored in the 
+                 second color value. If None, links are colored automatically
         show: set to False to suppress image drawing
     """
 
@@ -227,6 +282,9 @@ def draw(genes: list[Gene], links: list[Link], font = None,
 
     if genecols is not None:
         assert len(genecols) == len(genes), "[ERROR] >>> genecols must have same length as genes"
+    
+    if linkcol is not None and type(linkcol).__name__ == 'tuple':
+        assert len(linkcol) >= 2, "[ERROR] >>> linkcol must be a single color name or value or a 2-tuple of colors"
 
     # determine number of gene rows based on species
     speciesToRow = {} # {"species": row_num, ...}
@@ -293,26 +351,7 @@ def draw(genes: list[Gene], links: list[Link], font = None,
     
     # start drawing
     img = Image.new(mode = "RGB", size = (width, height), color = "white")
-    drw = ImageDraw.Draw(img) # drawing context
-    
-    # helper class containing array of handpicked color names for automatic coloring
-    class Palette:
-        def __init__(self, idx = 0):
-            self.colors = ['darkblue', 'darkorange', 'blueviolet', 'burlywood', 'darkgreen', 'darkmagenta', 'cadetblue',
-                           'chocolate', 'cyan', 'darkgoldenrod', 'darkcyan', 'darkkhaki', 'darkred', 'darkolivegreen', 
-                           'darksalmon', 'darkseagreen', 'darkslateblue', 'darkslategrey', 'darkturquoise', 'deeppink',
-                           'dodgerblue', 'gold', 'greenyellow', 'indigo', 'khaki', 'lightblue', 'maroon', 'plum', 
-                           'teal', 'bisque', 'aquamarine']
-            self.i = idx if idx < len(self.colors) else -1 # default to last color if idx too large
-
-        def color(self):
-            return self.colors[self.i]
-
-        def inc(self):
-            self.i += 1
-            if self.i >= len(self.colors):
-                self.i = 0
-    
+    drw = ImageDraw.Draw(img) # drawing context    
     palette = Palette(2) # default gene coloring are darkblue and darkorange, start at blueviolet for additional colors
     if elementcols is None:
         typeToPalette = {} # fill with default colors later
@@ -331,23 +370,32 @@ def draw(genes: list[Gene], links: list[Link], font = None,
                     text = gc.gene.id,
                     font = font, fill = "black")
 
-        for type in gc.gene.elements:
-            if type not in typeToPalette:
-                typeToPalette[type] = palette.color()
+        for elemtype in gc.gene.elements:
+            if elemtype not in typeToPalette:
+                typeToPalette[elemtype] = palette.color()
                 palette.inc()
 
-            for elem in gc.gene.elements[type]:
+            for elem in gc.gene.elements[elemtype]:
                 a = gc.x0 + (gc.res * elem[0])
                 b = gc.x0 + (gc.res * elem[1])
                 drw.line(xy = ((a, gc.y), (b, gc.y)),
-                         fill = typeToPalette[type],
+                         fill = typeToPalette[elemtype],
                          width = genewidth)
 
     # draw links
     if links is not None:
-        sscol = palette.color()
-        palette.inc()
-        oscol = palette.color()
+        if linkcol is None:
+            sscol = palette.color()
+            palette.inc()
+            oscol = palette.color()
+        else:
+            if type(linkcol).__name__ == 'tuple' and len(linkcol) == 2:
+                sscol = linkcol[0]
+                oscol = linkcol[1]
+            else: # assume 3-tuple of RGB values
+                sscol = linkcol
+                oscol = linkcol
+
         for link in links:
             for i in range(1, len(link.genes)):
                 gc1 = geneToCoord[link.genes[i-1].id]
