@@ -408,8 +408,8 @@ def draw(genes: list[Gene], links: list[Link], font = None,
 
         for link in links:
             for i in range(1, len(link.genes)):
-                gc1 = geneToCoord[link.genes[i-1].id]
-                gc2 = geneToCoord[link.genes[i].id]
+                gc1 = geneToCoord[link.genes[i-1]]
+                gc2 = geneToCoord[link.genes[i]]
                 x1 = gc1.x0 + (gc1.res * link.pos[i-1])
                 x2 = gc2.x0 + (gc2.res * link.pos[i])
                 if link.strands is not None and link.strands[i-1] != link.strands[i]:
