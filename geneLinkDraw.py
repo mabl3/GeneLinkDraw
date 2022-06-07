@@ -53,6 +53,10 @@ class Gene:
         self.strand = strand
         self.elements = dict()
 
+    def __str__(self):
+        return str({'id': self.id, 'species': self.species, 'len': self.len, 'strand': self.strand, 
+                    'elements': self.elements})
+
     def addElement(self, elemtype: str, start: int, end: int):
         """
         Adds a gene element (e.g. an exon)
@@ -114,6 +118,9 @@ class Link:
         
         self.strands = strands
 
+    def __str__(self):
+        return str({'genes': self.genes, 'pos': self.pos, 'strands': self.strands})
+
 
 
 class GeneCoordinates:
@@ -169,6 +176,9 @@ class GeneCoordinates:
             self.color = 'darkblue' if self.gene.strand == "+" else 'darkorange'
         else:
             self.color = col
+
+    def __str__(self):
+        return str({'id': self.id, 'color': self.color, 'len': self.len, 'res': self.res, 'x0': self.x0, 'y': self.y})
 
     def updateResolution(self, res : float):
         """
