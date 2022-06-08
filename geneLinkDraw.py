@@ -280,6 +280,9 @@ def draw(genes: list[Gene], links: list[Link], font = None,
 
     # some sanity checks
     assert len(genes) >= 2, "[ERROR] >>> Single genes cannot be linked"
+    geneIDs = [gene.id for gene in genes]
+    assert sorted(list(set(geneIDs))) == sorted(geneIDs), "[ERROR] >>> genes contain duplicate IDs"
+    
     if outerMargin is not None:
         assert outerMargin >= 0, "[ERROR] >>> margin must be positive"
         assert outerMargin < min(width/2, height/2), "[ERROR] >>> margin too big"
@@ -317,6 +320,10 @@ def draw(genes: list[Gene], links: list[Link], font = None,
     # special case: single species, draw all genes stacked
     if len(geneGrid) == 1:
         geneGrid = [[g] for g in geneGrid[0]]
+        
+    # assert that all genes have a grid position
+    checkGeneGridSum = sum([len(row) for row in geneGrid])
+    assert checkGeneGridSum == len(genes), "[ERROR] >>> Not all "+str(len(genes))+" genes in grid ("+str(checkGeneGridSum)+")"
 
     nrows = len(geneGrid)
 
@@ -338,18 +345,20 @@ def draw(genes: list[Gene], links: list[Link], font = None,
 
         y += (rowheight + vspace)
     
-    # determine longest gene row and pixel/bp resolution
-    maxRowLen = 0
-    ngenes = 0
-    for row in geneGrid:
-        rowLen = sum([gc.gene.len for gc in row])
-        if rowLen > maxRowLen:
-            maxRowLen = rowLen
-            ngenes = len(row)
-        
+    # determine lowest needed pixel/bp resolution
     genesep = int(width * 0.006) # number of pixels between two genes in a row
-    genepix = width - ((ngenes-1) * genesep) - (2 * outerMargin) # number of pixels for gene drawing
-    pxpbp = genepix / maxRowLen # pixel per basepair (horizontal)
+    def determineRowRes(row):
+        rowLen = sum([gc.gene.len for gc in row])
+        ngenes = len(row)
+        genepix = width - ((ngenes-1) * genesep) - (2 * outerMargin) # number of pixels for gene drawing
+        pxpbp = genepix / rowLen # pixel per basepair (horizontal)
+        return pxpbp
+        
+    pxpbp = None
+    for row in geneGrid:
+        rowRes = determineRowRes(row)
+        if pxpbp is None or rowRes < pxpbp:
+            pxpbp = rowRes
 
     # set for each gene the appropriate x0 and resolution
     for row in geneGrid:
@@ -424,7 +433,7 @@ def draw(genes: list[Gene], links: list[Link], font = None,
     if show:
         img.show()
 
-    return img
+    return img, geneToCoord
 
 
 
