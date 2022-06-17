@@ -142,10 +142,14 @@ class GeneCoordinates:
         drawing resolution in pixel / basepair
     x0 : int
         pixel coordinate of the first base
+    xn : int
+        pixel coordinate of the last (rightmost) base
     y : int
         vertical pixel coordinate
+    ylab : int
+        vertical pixel coordinate of the label
     """
-    def __init__(self, gene: Gene, x0: int, y: int, res: float, col = None):
+    def __init__(self, gene: Gene, x0: int, y: int, ylab: int, res: float, col = None):
         """
         Constructor
 
@@ -155,10 +159,10 @@ class GeneCoordinates:
             corresponding gene object
         x0 : int
             pixel coordinate of the first (leftmost) base
-        xn : int
-            pixel coordinate of the last (rightmost) base
-        y : 0
+        y : int
             vertical pixel coordinate
+        ylab : int
+            vertical pixel coordinate of the label
         res : float
             drawing resolution in pixel / basepair
         col : str or tuple of RGB values
@@ -168,9 +172,11 @@ class GeneCoordinates:
         self.id = gene.id
         assert x0 >= 0, '[ERROR] >>> pixel coordinate cannot be negative'
         assert y >= 0, '[ERROR] >>> pixel coordinate cannot be negative'
+        assert ylab >= 0, '[ERROR] >>> pixel coordinate cannot be negative'
         assert res > 0, '[ERROR] >>> resolution must be positive and greater than zero'
         self.x0 = x0
         self.y = y
+        self.ylab = ylab
         self.updateResolution(res) # sets self.res, self.len and self.xn
         if col is None:
             self.color = 'darkblue' if self.gene.strand == "+" else 'darkorange'
@@ -178,7 +184,8 @@ class GeneCoordinates:
             self.color = col
 
     def __str__(self):
-        return str({'id': self.id, 'color': self.color, 'len': self.len, 'res': self.res, 'x0': self.x0, 'y': self.y})
+        return str({'id': self.id, 'color': self.color, 'len': self.len, 
+                    'res': self.res, 'x0': self.x0, 'y': self.y, 'ylab': self.ylab})
 
     def updateResolution(self, res : float):
         """
@@ -300,15 +307,16 @@ def draw(genes: list[Gene], links: list[Link], font = None,
         assert len(linkcol) >= 2, "[ERROR] >>> linkcol must be a single color name or value or a 2-tuple of colors"
 
     # determine number of gene rows based on species
+    ylabOffset = int(1.5*genewidth)
     speciesToRow = {} # {"species": row_num, ...}
     geneGrid = [] # [[gene_coord, gene_coord, ...], [...], ...]
     geneToCoord = {} # {"geneID": gene_coord, ...}
     for i in range(len(genes)):
         gene = genes[i]
         if genecols is not None:
-            gc = GeneCoordinates(gene, 0, 0, 1, col = genecols[i]) # set coords and res later
+            gc = GeneCoordinates(gene, 0, 0, ylabOffset, 1, col = genecols[i]) # set coords and res later
         else:
-            gc = GeneCoordinates(gene, 0, 0, 1) # set coords and res later
+            gc = GeneCoordinates(gene, 0, 0, ylabOffset, 1) # set coords and res later
 
         if gene.species not in speciesToRow:
             speciesToRow[gene.species] = len(geneGrid)
@@ -323,7 +331,8 @@ def draw(genes: list[Gene], links: list[Link], font = None,
         
     # assert that all genes have a grid position
     checkGeneGridSum = sum([len(row) for row in geneGrid])
-    assert checkGeneGridSum == len(genes), "[ERROR] >>> Not all "+str(len(genes))+" genes in grid ("+str(checkGeneGridSum)+")"
+    assert checkGeneGridSum == len(genes), "[ERROR] >>> Not all "+str(len(genes))+" genes in grid ("\
+                                            +str(checkGeneGridSum)+")"
 
     nrows = len(geneGrid)
 
@@ -335,13 +344,16 @@ def draw(genes: list[Gene], links: list[Link], font = None,
         print("[WARNING] >>> Too many gene rows for image height, increasing image height to",
               height, "pixels. Adjust outerMargin, genewidth and fontsize if you want to keep the lower image height")
 
-    vspace = int((height - (nrows*rowheight) - (2 * outerMargin)) / (nrows-1)) if nrows > 1 else 0
+    #vspace = int((height - (nrows*rowheight) - (2 * outerMargin)) / (nrows-1)) if nrows > 1 else 0
+    vspace = int((height - (nrows*rowheight) - (2 * outerMargin)) / nrows) if nrows > 1 else 0 # keep vspace below last
+                                                                                               #   row for labels
     #rowToY = {}
     y = outerMargin
     for row in geneGrid:
         #rowToY[r] = y
         for gc in row:
             gc.y = y
+            gc.ylab = y + ylabOffset
 
         y += (rowheight + vspace)
     
@@ -350,7 +362,8 @@ def draw(genes: list[Gene], links: list[Link], font = None,
     def determineRowRes(row):
         rowLen = sum([gc.gene.len for gc in row])
         ngenes = len(row)
-        genepix = width - ((ngenes-1) * genesep) - (2 * outerMargin) # number of pixels for gene drawing
+        genepix = width - ((ngenes-1) * genesep) - (2 * outerMargin) # number of pixels available for gene drawing
+        genepix -= ngenes # genes are drawn math.ceil(len * res), so reserve an additional hypothetical pixel per gene
         pxpbp = genepix / rowLen # pixel per basepair (horizontal)
         return pxpbp
         
@@ -362,11 +375,35 @@ def draw(genes: list[Gene], links: list[Link], font = None,
 
     # set for each gene the appropriate x0 and resolution
     for row in geneGrid:
-        x0 = outerMargin+1
+        x0 = outerMargin
         for gc in row:
             gc.x0 = x0
             gc.updateResolution(pxpbp) # sets correct res, pixellen, xn
             x0 += (genesep + gc.len)
+            
+    # try to stack gene labels to avoid overlap as much as possible
+    for ri in range(len(geneGrid)):
+        row = geneGrid[ri]
+        maxY = (geneGrid[ri+1][0].y - fontsize) if (ri+1) < len(geneGrid) else (height-outerMargin-fontsize)
+        spaceAvail = (row[0].ylab < maxY)
+        ystack = [row[0].ylab] # track stack y coordinates
+        xn = [-1]              # track when each lane is available again
+        for gc in row:
+            laneAssigned = False
+            textw, texth = font.getsize(gc.gene.id)
+            for si in range(len(ystack)):
+                if xn[si] < gc.x0:
+                    gc.ylab = ystack[si] # take first free lane
+                    xn[si] = gc.x0 + textw
+                    laneAssigned = True
+                    break
+                    
+            if not laneAssigned and spaceAvail:
+                newY = ystack[-1]+(texth)
+                gc.ylab = newY
+                spaceAvail = (newY < maxY)
+                ystack.append(newY)
+                xn.append(gc.x0 + textw)
     
     # start drawing
     img = Image.new(mode = "RGB", size = (width, height), color = "white")
@@ -381,13 +418,13 @@ def draw(genes: list[Gene], links: list[Link], font = None,
     for gid in geneToCoord:
         gc = geneToCoord[gid]
         drw.line(xy = ((gc.x0, gc.y), (gc.xn, gc.y)),
-                    fill = gc.color,
-                    width = genewidth)
+                 fill = gc.color,
+                 width = genewidth)
 
         # write gene name below
-        drw.text(xy = (gc.x0, gc.y+int(1.5*genewidth)), 
-                    text = gc.gene.id,
-                    font = font, fill = "black")
+        drw.text(xy = (gc.x0, gc.ylab), #(gc.x0, gc.y+int(1.5*genewidth)), 
+                 text = gc.gene.id,
+                 font = font, fill = "black")
 
         for elemtype in gc.gene.elements:
             if elemtype not in typeToPalette:
@@ -414,6 +451,9 @@ def draw(genes: list[Gene], links: list[Link], font = None,
             else: # assume 3-tuple of RGB values
                 sscol = linkcol
                 oscol = linkcol
+                
+        radius = math.ceil(linkwidth/2) #+ 1
+        diam = radius*2
 
         for link in links:
             for i in range(1, len(link.genes)):
@@ -426,6 +466,16 @@ def draw(genes: list[Gene], links: list[Link], font = None,
                 else:
                     col = sscol
 
+                # draw markers where the links hit
+                drw.ellipse(xy = ((x1-radius, gc1.y-radius), (x1+radius, gc1.y+radius)),
+                            fill = sscol,
+                            outline = sscol,
+                            width = 1)
+                drw.ellipse(xy = ((x2-radius, gc2.y-radius), (x2+radius, gc2.y+radius)),
+                            fill = sscol,
+                            outline = sscol,
+                            width = 1)
+                # draw the link
                 drw.line(xy = ((x1, gc1.y), (x2, gc2.y)),
                         fill = col,
                         width = linkwidth)
