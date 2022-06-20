@@ -432,8 +432,8 @@ def draw(genes: list[Gene], links: list[Link], font = None,
                 palette.inc()
 
             for elem in gc.gene.elements[elemtype]:
-                a = gc.x0 + (gc.res * elem[0])
-                b = gc.x0 + (gc.res * elem[1])
+                a = gc.x0 + math.floor((gc.res * elem[0]))
+                b = gc.x0 + math.ceil((gc.res * elem[1]))
                 drw.line(xy = ((a, gc.y), (b, gc.y)),
                          fill = typeToPalette[elemtype],
                          width = genewidth)
