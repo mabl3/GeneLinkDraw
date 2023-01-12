@@ -81,20 +81,28 @@ class Gene:
 
 class Link:
     """
-    Class to represent a link for drawing
-
-    ...
+    Class to represent a link for drawing. Can be in compressed mode to represent many links instead of individual ones.
     
     Attributes
     ----------
     genes : list
         list of gene identifiers for genes connected by the link
     pos : list
-        list of positions for each respective gene where the link connects them
+        list of positions for each respective gene where the link connects them (uncompressed mode, default). If
+        compressed mode is activated, this is a list of lists of positions, giving one or more positions for each
+        respective gene
     strand : list
-        optional list of strands on which the link connects the genes
+        optional list of strands on which the link connects the genes. Note that currently storing of differing strands
+        per gene in compressed mode is not implemented.
+    connect : bool
+        True by default. If False, do not connect occurrences when drawing and only draw markers at occurrence sites
+    compressed : bool
+        False by default. If True, the object is storing many links among the same genes
+    col : None or str or tuple of RGB values
+        optional color of drawn link, defaults to None and color is determined automatically
     """
-    def __init__(self, genes: list[Gene], pos: list[int], strands: list[str] = None):
+    def __init__(self, genes: list[Gene], pos: list[int], strands: list[str] = None, connect: bool = True, 
+                 compressed: bool = False, col = None):
         """
         Constructor
 
@@ -103,12 +111,24 @@ class Link:
         genes : list
             list of gene identifiers for genes connected by the link
         pos : list
-            list of positions for each respective gene where the link connects them
+            list of positions for each respective gene where the link connects them. If compressed is True, this must be
+            a list of lists of positions, giving one or more positions for each respective gene
         strand : list
             optional list of strands on which the link connects the genes
+        connect : bool
+            True by default. Set to False to not connect occurrences when drawing and only draw markers at occurrence 
+            sites
+        compressed : bool
+            False by default. Set to True to enable storing many links among the same genes
+        col : None or str or tuple of RGB values
+            optional color of drawn link, defaults to None and color is determined automatically
         """
         assert len(genes) == len(pos), "[ERROR] >>> genes and pos must be of equal length"
         assert len(genes) >= 2, "[ERROR] >>> A link must connect at least two genes"
+        if compressed:
+            assert all([len(pl) > 0 for pl in pos]), "[ERROR] >>> Need lists of positions for each gene in compressed"+\
+                                                     " mode, and each list must contain at least one position. Got: "+\
+                                                     str(pos)
         assert len(set(genes)) == len(genes), "[ERROR] >>> All genes in a link must be unique"
         self.genes = genes
         self.pos = pos
@@ -117,6 +137,9 @@ class Link:
             assert all([s in ['+', '-'] for s in strands]), "[ERROR] >>> Strands must be '+' or '-'"
         
         self.strands = strands
+        self.connect = connect
+        self.compressed = compressed
+        self.col = col
 
     def __str__(self):
         return str({'genes': self.genes, 'pos': self.pos, 'strands': self.strands})
@@ -281,7 +304,7 @@ def draw(genes: list[Gene], links: list[Link], font = None,
         elementcols: optional dict with element type names as keys and color values as values
         linkcol: optional color value (name or RGB tuple) or 2-tuple of color values to use for all links. If single
                  value, all links are colored this way, otherwise links between opposing strands are colored in the 
-                 second color value. If None, links are colored automatically
+                 second color value. If None, links are colored automatically. Is overwritten by Link.col values if set.
         show: set to False to suppress image drawing
     """
 
@@ -453,32 +476,60 @@ def draw(genes: list[Gene], links: list[Link], font = None,
                 oscol = linkcol
                 
         radius = math.ceil(linkwidth/2) #+ 1
-        diam = radius*2
+        #diam = radius*2
 
         for link in links:
             for i in range(1, len(link.genes)):
                 gc1 = geneToCoord[link.genes[i-1]]
                 gc2 = geneToCoord[link.genes[i]]
-                x1 = gc1.x0 + (gc1.res * link.pos[i-1])
-                x2 = gc2.x0 + (gc2.res * link.pos[i])
                 if link.strands is not None and link.strands[i-1] != link.strands[i]:
-                    col = oscol
+                    col = oscol if link.col is None else link.col
                 else:
-                    col = sscol
+                    col = sscol if link.col is None else link.col
 
-                # draw markers where the links hit
-                drw.ellipse(xy = ((x1-radius, gc1.y-radius), (x1+radius, gc1.y+radius)),
-                            fill = sscol,
-                            outline = sscol,
-                            width = 1)
-                drw.ellipse(xy = ((x2-radius, gc2.y-radius), (x2+radius, gc2.y+radius)),
-                            fill = sscol,
-                            outline = sscol,
-                            width = 1)
-                # draw the link
-                drw.line(xy = ((x1, gc1.y), (x2, gc2.y)),
-                        fill = col,
-                        width = linkwidth)
+                if not link.compressed:
+                    # draw markers where the links hit
+                    x1 = gc1.x0 + (gc1.res * link.pos[i-1])
+                    x2 = gc2.x0 + (gc2.res * link.pos[i])
+                    drw.ellipse(xy = ((x1-radius, gc1.y-radius), (x1+radius, gc1.y+radius)),
+                                fill = sscol,
+                                outline = sscol,
+                                width = 1)
+                    drw.ellipse(xy = ((x2-radius, gc2.y-radius), (x2+radius, gc2.y+radius)),
+                                fill = sscol,
+                                outline = sscol,
+                                width = 1)
+                    # draw the link
+                    if link.connect:
+                        drw.line(xy = ((x1, gc1.y), (x2, gc2.y)),
+                                fill = col,
+                                width = linkwidth)
+                else:
+                    # draw markers where the links hit
+                    x1ls = []
+                    x2ls = []
+                    for p1 in link.pos[i-1]:
+                        x1 = gc1.x0 + (gc1.res * p1)
+                        x1ls.append(x1)
+                        drw.ellipse(xy = ((x1-radius, gc1.y-radius), (x1+radius, gc1.y+radius)),
+                                    fill = sscol,
+                                    outline = sscol,
+                                    width = 1)
+                    for p2 in link.pos[i]:
+                        x2 = gc2.x0 + (gc2.res * p2)
+                        x2ls.append(x2)
+                        drw.ellipse(xy = ((x2-radius, gc2.y-radius), (x2+radius, gc2.y+radius)),
+                                    fill = sscol,
+                                    outline = sscol,
+                                    width = 1)
+                    # draw links
+                    if link.connect:
+                        for x1 in x1ls:
+                            for x2 in x2ls:
+                                drw.line(xy = ((x1, gc1.y), (x2, gc2.y)),
+                                        fill = col,
+                                        width = linkwidth)
+                        
 
     if show:
         img.show()
