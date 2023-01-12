@@ -98,11 +98,11 @@ class Link:
         True by default. If False, do not connect occurrences when drawing and only draw markers at occurrence sites
     compressed : bool
         False by default. If True, the object is storing many links among the same genes
-    col : None or str or tuple of RGB values
+    color : None or str or tuple of RGB values
         optional color of drawn link, defaults to None and color is determined automatically
     """
     def __init__(self, genes: list[Gene], pos: list[int], strands: list[str] = None, connect: bool = True, 
-                 compressed: bool = False, col = None):
+                 compressed: bool = False, color = None):
         """
         Constructor
 
@@ -120,7 +120,7 @@ class Link:
             sites
         compressed : bool
             False by default. Set to True to enable storing many links among the same genes
-        col : None or str or tuple of RGB values
+        color : None or str or tuple of RGB values
             optional color of drawn link, defaults to None and color is determined automatically
         """
         assert len(genes) == len(pos), "[ERROR] >>> genes and pos must be of equal length"
@@ -139,7 +139,7 @@ class Link:
         self.strands = strands
         self.connect = connect
         self.compressed = compressed
-        self.col = col
+        self.color = color
 
     def __str__(self):
         return str({'genes': self.genes, 'pos': self.pos, 'strands': self.strands})
@@ -483,26 +483,28 @@ def draw(genes: list[Gene], links: list[Link], font = None,
                 gc1 = geneToCoord[link.genes[i-1]]
                 gc2 = geneToCoord[link.genes[i]]
                 if link.strands is not None and link.strands[i-1] != link.strands[i]:
-                    col = oscol if link.col is None else link.col
+                    lcol = oscol if link.color is None else link.color
                 else:
-                    col = sscol if link.col is None else link.col
+                    lcol = sscol if link.color is None else link.color
+
+                ellcol = sscol if link.color is None else link.color
 
                 if not link.compressed:
                     # draw markers where the links hit
                     x1 = gc1.x0 + (gc1.res * link.pos[i-1])
                     x2 = gc2.x0 + (gc2.res * link.pos[i])
                     drw.ellipse(xy = ((x1-radius, gc1.y-radius), (x1+radius, gc1.y+radius)),
-                                fill = sscol,
-                                outline = sscol,
+                                fill = ellcol,
+                                outline = ellcol,
                                 width = 1)
                     drw.ellipse(xy = ((x2-radius, gc2.y-radius), (x2+radius, gc2.y+radius)),
-                                fill = sscol,
-                                outline = sscol,
+                                fill = ellcol,
+                                outline = ellcol,
                                 width = 1)
                     # draw the link
                     if link.connect:
                         drw.line(xy = ((x1, gc1.y), (x2, gc2.y)),
-                                fill = col,
+                                fill = lcol,
                                 width = linkwidth)
                 else:
                     # draw markers where the links hit
@@ -512,22 +514,22 @@ def draw(genes: list[Gene], links: list[Link], font = None,
                         x1 = gc1.x0 + (gc1.res * p1)
                         x1ls.append(x1)
                         drw.ellipse(xy = ((x1-radius, gc1.y-radius), (x1+radius, gc1.y+radius)),
-                                    fill = sscol,
-                                    outline = sscol,
+                                    fill = ellcol,
+                                    outline = ellcol,
                                     width = 1)
                     for p2 in link.pos[i]:
                         x2 = gc2.x0 + (gc2.res * p2)
                         x2ls.append(x2)
                         drw.ellipse(xy = ((x2-radius, gc2.y-radius), (x2+radius, gc2.y+radius)),
-                                    fill = sscol,
-                                    outline = sscol,
+                                    fill = ellcol,
+                                    outline = ellcol,
                                     width = 1)
                     # draw links
                     if link.connect:
                         for x1 in x1ls:
                             for x2 in x2ls:
                                 drw.line(xy = ((x1, gc1.y), (x2, gc2.y)),
-                                        fill = col,
+                                        fill = lcol,
                                         width = linkwidth)
                         
 
