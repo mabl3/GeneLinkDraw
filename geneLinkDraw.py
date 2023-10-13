@@ -1,3 +1,4 @@
+import logging
 import math
 from matplotlib import font_manager
 from tkinter import font
@@ -364,8 +365,11 @@ def draw(genes: list[Gene], links: list[Link], font = None,
     rowpix = height - (2 * outerMargin)
     if nrows * rowheight > rowpix:
         height = (2 * outerMargin) + (nrows * rowheight)
-        print("[WARNING] >>> Too many gene rows for image height, increasing image height to",
-              height, "pixels. Adjust outerMargin, genewidth and fontsize if you want to keep the lower image height")
+        logging.warning("[geneLinkDraw.draw] >>> Too many gene rows for image height, increasing image height to " + \
+                        f"{height} pixels. Adjust outerMargin, genewidth and fontsize if you want to keep the lower " +\
+                        "image height")
+        #print("[WARNING] >>> Too many gene rows for image height, increasing image height to",
+        #      height, "pixels. Adjust outerMargin, genewidth and fontsize if you want to keep the lower image height")
 
     #vspace = int((height - (nrows*rowheight) - (2 * outerMargin)) / (nrows-1)) if nrows > 1 else 0
     vspace = int((height - (nrows*rowheight) - (2 * outerMargin)) / nrows) if nrows > 1 else 0 # keep vspace below last
