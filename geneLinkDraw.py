@@ -417,7 +417,15 @@ def draw(genes: list[Gene], links: list[Link], font = None,
         xn = [-1]              # track when each lane is available again
         for gc in row:
             laneAssigned = False
-            textw, texth = font.getsize(gc.gene.id)
+            try:
+                textbbox_left, textbbox_top, textbbox_right, textbbox_bottom = font.getbbox(gc.gene.id) #top-left anchor
+                textw = textbbox_right - textbbox_left
+                texth = textbbox_bottom - textbbox_top
+            except Exception as e:
+                logging.warning("[geneLinkDraw.draw] >>> Could not determine text size via font.getbbox:" + str(e) \
+                                + ". Trying deprecated font.getsize() method.")
+                textw, texth = font.getsize(gc.gene.id)
+                
             for si in range(len(ystack)):
                 if xn[si] < gc.x0:
                     gc.ylab = ystack[si] # take first free lane
