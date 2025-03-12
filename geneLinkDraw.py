@@ -451,6 +451,8 @@ class Legend:
         line width of drawn genes in pixels.
     linkwidth : int
         line width of drawn links in pixels.
+    linkradius: int
+        radius of drawn link sites in pixels.
     siteradius : int
         radius of drawn sites ellipses in pixels.
     fontsize : int
@@ -468,6 +470,7 @@ class Legend:
     outerBox: bool
     genewidth: int
     linkwidth: int
+    linkradius: int
     siteradius: int
     fontsize: int
     font: ImageFont.FreeTypeFont
@@ -559,6 +562,11 @@ class Legend:
             self.drawInstructions.append({
                 'method': 'line',
                 'kwargs': {'xy': (x, ylink, x+linelen, ylink), 'fill': col, 'width': self.linkwidth}
+            })
+            self.drawInstructions.append({
+                'method': 'ellipse',
+                'kwargs': {'xy': (x+(linelen//2)-self.linkradius, ylink-self.linkradius, 
+                                  x+(linelen//2)+self.linkradius, ylink+self.linkradius), 'fill': col, 'width': 1}
             })
             
             self.drawInstructions.append({
@@ -754,8 +762,8 @@ def draw(genes: list[Gene], links: list[Link], fontpath: str = None,
         
     legend = Legend(genecol_fwd=genefwdcol, genecol_rev=generevcol, lcol=linkcol, elementcols=elementcols,
                     sitecols=sitecols, innerMargin=genewidth, outerMargin=outerMargin, outerBox=True, 
-                    genewidth=genewidth, linkwidth=linkwidth, siteradius=math.ceil(genewidth/3), 
-                    fontsize=fontsize, font=font)
+                    genewidth=genewidth, linkwidth=linkwidth, linkradius=math.ceil(linkwidth/2) + 1,
+                    siteradius=math.ceil(genewidth/4), fontsize=fontsize, font=font)
     legendwidth, legendheight = legend.getDimensions()
     legend.setCoordinates(outerMargin, outerMargin)
 
@@ -827,7 +835,7 @@ def draw(genes: list[Gene], links: list[Link], fontpath: str = None,
     drw = ImageDraw.Draw(img) # drawing context    
     
     # draw genes and elements
-    siteradius = math.ceil(genewidth/3) #+ 1
+    siteradius = math.ceil(genewidth/4)
     for row in generows:
         for gene in row:
             gdi: GeneDrawInfo = gene.drawInfo
@@ -848,7 +856,7 @@ def draw(genes: list[Gene], links: list[Link], fontpath: str = None,
 
     # draw links
     if links is not None:
-        radius = math.ceil(linkwidth/2) + 1
+        linkradius = math.ceil(linkwidth/2) + 1
         geneToRow = {gene.id: r for r, row in enumerate(generows) for gene in row}
         for li, link in enumerate(links):
             lcol = linkcols[li] if linkcols is not None else linkcol
@@ -868,7 +876,8 @@ def draw(genes: list[Gene], links: list[Link], fontpath: str = None,
                     anchorsByRow[r].append(gdi.linkAnchors[link.pos[i]])
 
                 for a in anchorsByRow[r]:
-                    drw.ellipse((a[0]-radius, a[1]-radius, a[0]+radius, a[1]+radius), fill=lcol, outline=lcol, width=1)
+                    drw.ellipse((a[0]-linkradius, a[1]-linkradius, a[0]+linkradius, a[1]+linkradius), 
+                                fill=lcol, outline=lcol, width=1)
 
             if link.connect:
                 lrows = sorted(anchorsByRow.keys())
