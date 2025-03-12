@@ -869,8 +869,8 @@ def draw(genes: list[Gene], links: list[Link], fontpath: str = None,
                 if r not in anchorsByRow:
                     anchorsByRow[r] = []
                 if link.compressed:
-                    logging.debug(f"[INFO] >>> Compressed link: {link.genes[i]} -> {link.pos[i]}")
-                    logging.debug(f"[INFO] >>> Link anchors: {gdi}")
+                    #logging.debug(f"[INFO] >>> Compressed link: {link.genes[i]} -> {link.pos[i]}")
+                    #logging.debug(f"[INFO] >>> Link anchors: {gdi}")
                     anchorsByRow[r].extend([gdi.linkAnchors[p] for p in link.pos[i]])
                 else:
                     anchorsByRow[r].append(gdi.linkAnchors[link.pos[i]])
