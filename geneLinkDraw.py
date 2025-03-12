@@ -713,7 +713,7 @@ def draw(genes: list[Gene], links: list[Link], fontpath: str = None,
         font = None # use default font later
     else:
         try:
-            font = ImageFont.truetype(font, fontsize)
+            font = ImageFont.truetype(str(fontpath), fontsize)
         except Exception as e:
             logging.error("[geneLinkDraw.draw] >>> Could not load font: " + str(e))
             logging.info("[geneLinkDraw.draw] >>> Using default font")
