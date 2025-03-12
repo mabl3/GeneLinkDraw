@@ -215,6 +215,27 @@ class Link:
 
 
 
+def _getTextDimensions(font: ImageFont.FreeTypeFont, fontsize: int, text: str):
+    """ Get the text dimensions in pixels """
+    try:
+        textbbox_left, textbbox_top, textbbox_right, textbbox_bottom = font.getbbox(text) # using top-left anchor
+        textw = textbbox_right - textbbox_left
+        texth = textbbox_bottom - textbbox_top
+    except Exception as e:
+        logging.warning("[geneLinkDraw.draw] >>> Could not determine text size via font.getbbox:" + str(e) \
+                        + ". Trying deprecated font.getsize() method.")
+        try:
+            textw, texth = font.getsize(text)
+        except Exception as e:
+            logging.error("[geneLinkDraw.draw] >>> Could not determine text size via font.getsize():" + str(e) \
+                        + ". Using fixed text width of 100 pixels.")
+            textw = 100
+            texth = fontsize
+
+    return textw, texth
+
+
+
 class GeneDrawInfo:
     """ 
     Class containing actual drawing information (coordinates and colors) for a gene, its label, elements, sites 
@@ -222,7 +243,7 @@ class GeneDrawInfo:
     """
     def __init__(self, gene: Gene, x0: int, y0: int, label: str, genewidth: int, 
                  font: ImageFont.FreeTypeFont, fontsize: int, res: float, 
-                 elementColors: dict, siteColors: dict, geneColor=None):
+                 elementColors: dict, siteColors: dict, geneColor):
         """
         Constructor
 
@@ -249,7 +270,7 @@ class GeneDrawInfo:
         siteColors : dict
             site type names as keys and color values as values
         geneColor : str or tuple of RGB values
-            color value (string or rgb) of drawn gene, defaults to darkblue for '+' strand and darkorange for '-' strand
+            color value (string or rgb) of drawn gene
         
         """
         self.x0 = x0
@@ -261,29 +282,17 @@ class GeneDrawInfo:
         self.res = res
         self.elementColors = elementColors
         self.siteColors = siteColors
-        if geneColor is None:
-            self.geneColor = 'darkblue' if gene.strand == "+" else 'darkorange'
-        else:
-            self.geneColor = geneColor
+        self.geneColor = geneColor
+        # if geneColor is None:
+        #     self.geneColor = 'darkblue' if gene.strand == "+" else 'darkorange'
+        # else:
+        #     self.geneColor = geneColor
         
         assert fontsize > 0, "[ERROR] >>> Fontsize must be bigger than 0"
         assert res > 0, "[ERROR] >>> Resolution must be positive and greater than zero"
         
         # set label coordinates
-        try:
-            textbbox_left, textbbox_top, textbbox_right, textbbox_bottom = font.getbbox(gene.id) # using top-left anchor
-            textw = textbbox_right - textbbox_left
-            texth = textbbox_bottom - textbbox_top
-        except Exception as e:
-            logging.warning("[geneLinkDraw.draw] >>> Could not determine text size via font.getbbox:" + str(e) \
-                            + ". Trying deprecated font.getsize() method.")
-            try:
-                textw, texth = self.font.getsize(gene.id)
-            except Exception as e:
-                logging.error("[geneLinkDraw.draw] >>> Could not determine text size via font.getsize():" + str(e) \
-                            + ". Using fixed text width of 100 pixels.")
-                textw = 100
-                texth = self.fontsize
+        textw, texth = _getTextDimensions(self.font, self.fontsize, self.label)
 
         self.x0_label = self.x0
         self.x1_label = self.x0 + textw - 1
@@ -416,6 +425,226 @@ def optimizeGeneRow(genes: list[Gene], margin: int):
 
 
 
+@dataclass
+class Legend:
+    """ Class to represent a legend for the image 
+    
+    Attributes
+    ----------
+    genecol_fwd : str | RGB tuple | None
+        color of gene bars for forward strand. Set to None for single color for all genes, no matter the strand.
+    genecol_rev : str | RGB tuple | None
+        color of gene bars for reverse strand. Set to None for single color for all genes, no matter the strand.
+    lcol : str | RGB tuple | None
+        color of links. Set to None for automatic coloring (black).
+    elementcols : dict | None
+        element type names as keys and color values as values. Set to None for no elements.
+    sitecols : dict | None
+        site type names as keys and color values as values. Set to None for no sites.
+    innerMargin : int
+        distance between legend elements in pixels.
+    outerMargin : int
+        distance from image edge to drawn content in pixels.
+    outerBox : bool
+        whether to draw a box around the legend.
+    genewidth : int
+        line width of drawn genes in pixels.
+    linkwidth : int
+        line width of drawn links in pixels.
+    siteradius : int
+        radius of drawn sites ellipses in pixels.
+    fontsize : int
+        fontsize of text.
+    font : ImageFont.FreeTypeFont
+        font object for drawing the legend text.
+    """
+    genecol_fwd: str
+    genecol_rev: str
+    lcol: str
+    elementcols: dict
+    sitecols: dict
+    innerMargin: int
+    outerMargin: int
+    outerBox: bool
+    genewidth: int
+    linkwidth: int
+    siteradius: int
+    fontsize: int
+    font: ImageFont.FreeTypeFont
+
+    def __post_init__(self):
+        assert self.outerMargin >= 0, "[ERROR] >>> margin must be positive"
+        assert self.genewidth > 0, "[ERROR] >>> Gene width must be positive"
+        assert self.fontsize > 0, "[ERROR] >>> Fontsize must be positive"
+
+        # create legend elements and set all coordinates, for now just dummy values to get dimensions
+        self.setCoordinates(0, 0)
+
+    def draw(self, drw: ImageDraw.Draw):
+        """ Draw the legend on the image """
+        for element in self.drawInstructions:
+            getattr(drw, element['method'])(**element['kwargs'])
+            if self.outerBox:
+                drw.rectangle((self.x0, self.y0, self.x0+self.width, self.y0+self.height), outline='black', width=1)
+
+
+    def getDimensions(self):
+        """ returns the width and height of the legend in pixels """
+        return self.width, self.height
+
+
+    def setCoordinates(self, x0, y0):
+        """ Set the coordinates of the legend elements according to x0 and y0 as topleft anchor """
+        self.x0 = x0
+        self.y0 = y0
+        # list of drawing instructions, each a dict with {'method': draw method, 'kwargs': {kwargs}}
+        self.drawInstructions = []
+
+        # later call: 
+        # bar = getattr(foo, 'bar')
+        # bar()
+
+        # gene legend
+        x = self.x0 + self.outerMargin # running start coordinates
+        y = self.y0 + self.outerMargin
+        maxw = self.genewidth * 3 # maximum width of legend elements (except text)
+        xmax = x
+        ymax = y
+
+        def _addGeneLegend(x, y, barlen, col, text):
+            barlen = min(barlen, maxw)
+            textw, texth = _getTextDimensions(self.font, self.fontsize, text)
+            yshift = (self.genewidth - texth) // 2
+            if texth > self.genewidth:
+                ygene = y - yshift
+                ytext = y
+            else:
+                ygene = y
+                ytext = y + yshift
+
+            self.drawInstructions.append({
+                'method': 'rectangle',
+                'kwargs': {'xy': (x, ygene, x+barlen, ygene+self.genewidth), 'fill': col, 'width': 1}
+            })
+            
+            self.drawInstructions.append({
+                'method': 'text',
+                'kwargs': {'xy': (x+maxw+self.innerMargin, ytext), 'text': text, 'font': self.font, 'fill': 'black'}
+            })
+            # # FOR DEBUGGING: add bbox around text
+            # textbbox_left, textbbox_top, textbbox_right, textbbox_bottom = self.font.getbbox(text) # using top-left anchor
+            # self.drawInstructions.append({
+            #     'method': 'rectangle',
+            #     'kwargs': {'xy': (x+maxw+self.innerMargin+textbbox_left, ytext+textbbox_top, 
+            #                       x+maxw+self.innerMargin+textbbox_right, ytext+textbbox_bottom), 'outline': 'red', 'width': 1}
+            # })
+            # # -----------------------------------
+
+            width = maxw+self.innerMargin+textw # width of this legend element
+            height = max(self.genewidth, texth)
+            return width, height
+        
+
+        def _addLinkLegend(x, y, linelen, col, text="Link"):
+            linelen = min(linelen, maxw)
+            textw, texth = _getTextDimensions(self.font, self.fontsize, text)
+            yshift = (self.linkwidth - texth) // 2
+            if texth > self.linkwidth:
+                ylink = y - yshift
+                ytext = y
+            else:
+                ylink = y
+                ytext = y + yshift
+
+            self.drawInstructions.append({
+                'method': 'line',
+                'kwargs': {'xy': (x, ylink, x+linelen, ylink), 'fill': col, 'width': self.linkwidth}
+            })
+            
+            self.drawInstructions.append({
+                'method': 'text',
+                'kwargs': {'xy': (x+maxw+self.innerMargin, ytext), 'text': text, 'font': self.font, 'fill': 'black'}
+            })
+            width = maxw+self.innerMargin+textw # width of this legend element
+            height = max(self.linkwidth, texth)
+            return width, height
+        
+
+        def _addEllipseLegend(x, y, radius, col, text):
+            radius = min(radius, maxw//2)
+            diam = 2*radius
+            textw, texth = _getTextDimensions(self.font, self.fontsize, text)
+            yshift = (diam - texth) // 2
+            if texth > diam:
+                yelem = y - yshift
+                ytext = y
+            else:
+                yelem = y
+                ytext = y + yshift
+
+            self.drawInstructions.append({
+                'method': 'ellipse',
+                'kwargs': {'xy': (x, yelem, x+diam, yelem+diam), 'fill': col, 'width': 1}
+            })
+            
+            self.drawInstructions.append({
+                'method': 'text',
+                'kwargs': {'xy': (x+maxw+self.innerMargin, ytext), 'text': text, 'font': self.font, 'fill': 'black'}
+            })
+            width = maxw+self.innerMargin+textw
+            height = max(diam, texth)
+            return width, height
+
+
+        if self.genecol_fwd is not None and self.genecol_rev is not None and self.genecol_fwd != self.genecol_rev:
+            w1, h1 = _addGeneLegend(x, y, maxw, self.genecol_fwd, "Gene (+ strand)")
+            y += h1 + self.innerMargin
+            w2, h2 = _addGeneLegend(x, y, maxw, self.genecol_rev, "Gene (- strand)")
+            y += h2 + self.innerMargin
+            xmax = max(xmax, x+w1, x+w2)
+            ymax = y
+        else:
+            gcol = self.genecol_fwd \
+                if self.genecol_fwd is not None and self.genecol_rev is not None \
+                    and self.genecol_fwd == self.genecol_rev\
+                else 'black'
+            w, h = _addGeneLegend(x, y, maxw, gcol, "Gene")
+            y += h + self.innerMargin
+            xmax = max(xmax, x+w)
+            ymax = y
+
+        lcol = self.lcol if self.lcol is not None else 'black'
+        w, h = _addLinkLegend(x, y, maxw, lcol)
+        y += h # add margin later depending on if there are elements or sites
+        xmax = max(xmax, x+w)
+
+        if self.elementcols is None and self.sitecols is None:
+            # no elements or sites, just add margin and return
+            y += self.outerMargin
+            self.width = (xmax+self.outerMargin) - self.x0
+            self.height = y - self.y0
+            return
+        else:
+            if self.elementcols is not None:
+                for elemtype, col in self.elementcols.items():
+                    y += self.innerMargin # don't add again after last element
+                    w, h = _addGeneLegend(x, y, self.genewidth, col, elemtype)
+                    y += h
+                    xmax = max(xmax, x+w)
+
+            if self.sitecols is not None:
+                for sitetype, col in self.sitecols.items():
+                    y += self.innerMargin # don't add again after last site
+                    w, h = _addEllipseLegend(x, y, self.siteradius, col, sitetype)
+                    y += h
+                    xmax = max(xmax, x+w)
+
+            y += self.outerMargin
+            self.width = (xmax+self.outerMargin) - self.x0
+            self.height = y - self.y0
+
+
+
 # drawing function
 
 def draw(genes: list[Gene], links: list[Link], fontpath: str = None,
@@ -438,7 +667,7 @@ def draw(genes: list[Gene], links: list[Link], fontpath: str = None,
         height: image heigth in pixels
         dpi: image resolution in dpi
         forceDimensions: set to True to force width and height, otherwise image will be resized to fit all genes with
-                            approximately the desired width
+                            approximately the desired width (use of this option is stronlgy discouraged!)
         outerMargin: distance from image edge to drawn content in pixels, automatically set if None
         genewidth: line width of drawn genes in pixels
         linkwidth: line witdh of drawn links in pixels
@@ -502,7 +731,10 @@ def draw(genes: list[Gene], links: list[Link], fontpath: str = None,
         assert len(linkcols) == len(links), "[ERROR] >>> linkcols must have same length as links"
 
     # default gene coloring are darkblue and darkorange, start at blueviolet for add. colors
-    palette = Palette(2) if genecols is None else Palette() 
+    palette = Palette() 
+    genefwdcol = palette.colorpp() if genecols is None else None
+    generevcol = palette.colorpp() if genecols is None else None
+    linkcol = palette.colorpp() if linkcols is None else None
 
     elemtypes = set([elemtype for gene in genes for elemtype in gene.elements])
     if elementcols is None:
@@ -520,6 +752,12 @@ def draw(genes: list[Gene], links: list[Link], fontpath: str = None,
     assert all(s in sitecols for s in sitetypes), \
         "[ERROR] >>> Not all Gene.sites types have a corresponding siteColor"
         
+    legend = Legend(genecol_fwd=genefwdcol, genecol_rev=generevcol, lcol=linkcol, elementcols=elementcols,
+                    sitecols=sitecols, innerMargin=genewidth, outerMargin=outerMargin, outerBox=True, 
+                    genewidth=genewidth, linkwidth=linkwidth, siteradius=math.ceil(genewidth/3), 
+                    fontsize=fontsize, font=font)
+    legendwidth, legendheight = legend.getDimensions()
+    legend.setCoordinates(outerMargin, outerMargin)
 
     # determine number of gene rows based on species and set gene coordinates
     # -----------------------------------------------------------------------
@@ -544,22 +782,23 @@ def draw(genes: list[Gene], links: list[Link], fontpath: str = None,
     res = genepix / maxgenelen # pixel per basepair (horizontal)
 
     killswitch = 0
-    while True and killswitch < 10:
+    while True and killswitch < 5:
         killswitch += 1 # in case something goes wrong, avoid infinite loop
-        x0 = outerMargin
+        x0 = outerMargin + legendwidth + outerMargin
         y0 = outerMargin
         for row in generows:
             for gene in row:
-                genecol = gene._genecol if genecols is not None else None
+                # hack from above applies here:
+                genecol = gene._genecol if genecols is not None else (genefwdcol if gene.strand == "+" else generevcol)
                 GeneDrawInfo(gene, x0, y0, gene.id, genewidth, font, fontsize, res, 
-                             elementcols, sitecols, geneColor=genecol) # should add itself to gene
+                             elementcols, sitecols, genecol) # should add itself to gene
 
             optimizeGeneRow(row, genewidth) # optimize gene label positions
             y0 = max([g.drawInfo.y1_gene for g in row]) + fontsize # get next row start y coordinate
 
         # get current true width and height
         maxy = max([g.drawInfo.y1_gene for r in generows for g in r])
-        trueheight = maxy + outerMargin
+        trueheight = max(maxy + outerMargin, legendheight + 2*outerMargin)
         truewidth = max([max(max(g.drawInfo.x1_gene, g.drawInfo.x1_label) for g in r) for r in generows]) + outerMargin
 
         if truewidth <= width and trueheight <= height:
@@ -567,9 +806,14 @@ def draw(genes: list[Gene], links: list[Link], fontpath: str = None,
         elif not forceDimensions:
             break
         else:
-            wres = res * width / truewidth if truewidth > width else res # new resolution to fit width
-            hres = res * height / trueheight if trueheight > height else res # new resolution to fit height
-            res = min(wres, hres) # set resolution to the smaller of the two and try again
+            if truewidth > width:
+                res = res * width / truewidth # new resolution to fit width
+            elif trueheight > height:
+                # smaller res is useless, but try decreasing margins, genewidth and fontsize
+                scale = height / trueheight
+                outerMargin = max(1, int(outerMargin * scale))
+                genewidth = max(1, int(genewidth * scale))
+                fontsize = max(1, int(fontsize * scale))
             
     if not forceDimensions:
         logging.warning("[geneLinkDraw.draw] >>> Image dimensions adjusted to fit all genes")
@@ -604,11 +848,10 @@ def draw(genes: list[Gene], links: list[Link], fontpath: str = None,
 
     # draw links
     if links is not None:
-        lcol = palette.colorpp() if linkcols is None else None
         radius = math.ceil(linkwidth/2) + 1
         geneToRow = {gene.id: r for r, row in enumerate(generows) for gene in row}
         for li, link in enumerate(links):
-            lcol = linkcols[li] if linkcols is not None else lcol
+            lcol = linkcols[li] if linkcols is not None else linkcol
             anchorsByRow = {}
             for i in range(len(link.genes)):
                 gene = link.genes[i]
@@ -633,6 +876,9 @@ def draw(genes: list[Gene], links: list[Link], fontpath: str = None,
                     for a1 in anchorsByRow[lrows[i]]:
                         for a2 in anchorsByRow[lrows[i+1]]:
                             drw.line((a1, a2), fill=lcol, width=linkwidth)
+
+    # draw legend
+    legend.draw(drw)
 
     if show:
         img.show()
