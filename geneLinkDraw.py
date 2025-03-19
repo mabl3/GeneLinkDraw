@@ -732,7 +732,7 @@ def draw(genes: list[Gene], links: list[Link], fontpath: str = None,
 
     if genecols is not None:
         assert len(genecols) == len(genes), "[ERROR] >>> genecols must have same length as genes"
-        for i in range(genecols):
+        for i in range(len(genecols)):
             genes[i]._genecol = genecols[i] # use this hack to store the color in the gene object
     
     if linkcols is not None:
