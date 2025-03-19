@@ -740,25 +740,27 @@ def draw(genes: list[Gene], links: list[Link], fontpath: str = None,
 
     # default gene coloring are darkblue and darkorange, start at blueviolet for add. colors
     palette = Palette() 
-    genefwdcol = palette.colorpp() if genecols is None else None
-    generevcol = palette.colorpp() if genecols is None else None
-    linkcol = palette.colorpp() if linkcols is None else None
+    genefwdcol = palette.colorpp() if genecols is None else (genecols[0] if len(set(genecols)) == 1 else None)
+    generevcol = palette.colorpp() if genecols is None else (genecols[0] if len(set(genecols)) == 1 else None)
+    linkcol = palette.colorpp() if linkcols is None else (linkcols[0] if len(set(linkcols)) == 1 else None)
 
     elemtypes = set([elemtype for gene in genes for elemtype in gene.elements])
     if elementcols is None:
         elementcols = {elemtype: palette.colorpp() for elemtype in elemtypes}
-    assert all([e in elemtypes for e in elementcols]), \
-        "[ERROR] >>> Not all elementColors match an Gene.elements type"
     assert all(e in elementcols for e in elemtypes), \
         "[ERROR] >>> Not all Gene.elements types have a corresponding elementColor"
+    if not all([e in elemtypes for e in elementcols]):
+        logging.warning("[geneLinkDraw.draw] >>> Not all elementColors match an Gene.elements type, ignoring")
+        elementcols = {e: elementcols[e] for e in elemtypes} # only keep those that are actually used
     
     sitetypes = set([sitetype for gene in genes for sitetype in gene.sites])
     if sitecols is None:
         sitecols = {sitetype: palette.colorpp() for sitetype in sitetypes}
-    assert all([s in sitetypes for s in sitecols]), \
-        "[ERROR] >>> Not all siteColors match an Gene.sites type"
     assert all(s in sitecols for s in sitetypes), \
         "[ERROR] >>> Not all Gene.sites types have a corresponding siteColor"
+    if not all([s in sitetypes for s in sitecols]):
+        logging.warning("[geneLinkDraw.draw] >>> Not all siteColors match an Gene.sites type, ignoring")
+        sitecols = {s: sitecols[s] for s in sitetypes} # only keep those that are actually used
         
     legend = Legend(genecol_fwd=genefwdcol, genecol_rev=generevcol, lcol=linkcol, elementcols=elementcols,
                     sitecols=sitecols, innerMargin=genewidth, outerMargin=outerMargin, outerBox=True, 
@@ -831,7 +833,7 @@ def draw(genes: list[Gene], links: list[Link], fontpath: str = None,
     # draw image
     # ----------
 
-    img = Image.new(mode = "RGB", size = (width, height), color = "white")
+    img = Image.new(mode = "RGBA", size = (width, height), color = "white")
     drw = ImageDraw.Draw(img) # drawing context    
     
     # draw genes and elements
