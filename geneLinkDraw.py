@@ -699,23 +699,23 @@ def draw(genes: list[Gene], links: list[Link], fontpath: str = None,
         _gidToGene = {gene.id: gene for gene in genes}
         for link in links:
             for gene in link.genes:
-                assert gene.id in _gidToGene, "[ERROR] >>> Link contains gene not in genes list"
+                assert gene.id in _gidToGene, f"[ERROR] >>> Link contains gene ({gene.id}) not in genes list"
                 assert gene is _gidToGene[gene.id], "[ERROR] >>> Gene objects in links and genes must be the same"
     
     if outerMargin is not None:
-        assert outerMargin >= 0, "[ERROR] >>> margin must be positive"
-        assert outerMargin < min(width/2, height/2), "[ERROR] >>> margin too big"
+        assert outerMargin >= 0, f"[ERROR] >>> margin ({outerMargin}) must be positive"
+        assert outerMargin < min(width/2, height/2), f"[ERROR] >>> margin ({outerMargin}) too big ({width=}, {height=})"
     else:
         outerMargin = int(height*0.012)
 
-    assert fontsize > 0, "[ERROR] >>> Fontsize must be bigger than 0"
+    assert fontsize > 0, f"[ERROR] >>> Fontsize ({fontsize}) must be bigger than 0"
     if fontpath is None:
         font = None # use default font later
     else:
         try:
             font = ImageFont.truetype(str(fontpath), fontsize)
         except Exception as e:
-            logging.error("[geneLinkDraw.draw] >>> Could not load font: " + str(e))
+            logging.error(f"[geneLinkDraw.draw] >>> Could not load font `{fontpath}`: " + str(e))
             logging.info("[geneLinkDraw.draw] >>> Using default font")
             font = None
 
@@ -731,12 +731,14 @@ def draw(genes: list[Gene], links: list[Link], fontpath: str = None,
             font = ImageFont.load_default(fontsize)
 
     if genecols is not None:
-        assert len(genecols) == len(genes), "[ERROR] >>> genecols must have same length as genes"
+        assert len(genecols) == len(genes), \
+            f"[ERROR] >>> genecols ({len(genecols)}) must have same length as genes ({len(genes)})"
         for i in range(len(genecols)):
             genes[i]._genecol = genecols[i] # use this hack to store the color in the gene object
     
     if linkcols is not None:
-        assert len(linkcols) == len(links), "[ERROR] >>> linkcols must have same length as links"
+        assert len(linkcols) == len(links), \
+            f"[ERROR] >>> linkcols ({len(linkcols)}) must have same length as links ({len(links)})"
 
     # default gene coloring are darkblue and darkorange, start at blueviolet for add. colors
     palette = Palette() 
@@ -748,7 +750,7 @@ def draw(genes: list[Gene], links: list[Link], fontpath: str = None,
     if elementcols is None:
         elementcols = {elemtype: palette.colorpp() for elemtype in elemtypes}
     assert all(e in elementcols for e in elemtypes), \
-        "[ERROR] >>> Not all Gene.elements types have a corresponding elementColor"
+        f"[ERROR] >>> Not all Gene.elements types ({elemtypes}) have a corresponding elementColor ({elementcols})"
     if not all([e in elemtypes for e in elementcols]):
         logging.warning("[geneLinkDraw.draw] >>> Not all elementColors match an Gene.elements type, ignoring")
         elementcols = {e: elementcols[e] for e in elemtypes} # only keep those that are actually used
@@ -757,7 +759,7 @@ def draw(genes: list[Gene], links: list[Link], fontpath: str = None,
     if sitecols is None:
         sitecols = {sitetype: palette.colorpp() for sitetype in sitetypes}
     assert all(s in sitecols for s in sitetypes), \
-        "[ERROR] >>> Not all Gene.sites types have a corresponding siteColor"
+        f"[ERROR] >>> Not all Gene.sites types ({sitetypes}) have a corresponding siteColor ({sitecols})"
     if not all([s in sitetypes for s in sitecols]):
         logging.warning("[geneLinkDraw.draw] >>> Not all siteColors match an Gene.sites type, ignoring")
         sitecols = {s: sitecols[s] for s in sitetypes} # only keep those that are actually used
